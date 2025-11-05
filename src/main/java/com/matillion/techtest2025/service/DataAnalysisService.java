@@ -1,7 +1,7 @@
 package com.matillion.techtest2025.service;
 
 import com.matillion.techtest2025.controller.response.DataAnalysisResponse;
-//Added the request exception 
+// Added the request exception 
 import com.matillion.techtest2025.exception.BadRequestException;
 
 import com.matillion.techtest2025.model.ColumnStatistics;
@@ -14,6 +14,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+// NEW (Part 2): imports for unique counting
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Service layer containing business logic for data analysis.
@@ -43,6 +47,14 @@ public class DataAnalysisService {
          * <li>Computes per-column null counts</li>
          * <li>Persists parent and child entities to the H2 database</li>
          * <li>Returns a response DTO matching test expectations</li>
+         * </ul>
+         * <p>
+         * <b>Part 2 Additions:</b>
+         * <ul>
+         * <li>Compute per-column <code>uniqueCount</code> of non-null, trimmed
+         * values</li>
+         * <li>Persist <code>uniqueCount</code> into ColumnStatisticsEntity and expose
+         * in DTO</li>
          * </ul>
          *
          * @param data raw CSV data (rows separated by newlines, columns by commas)
@@ -82,6 +94,13 @@ public class DataAnalysisService {
                 int numberOfRows = lines.length - 1;
                 int[] nullCounts = new int[numberOfColumns]; // track null/empty cells per column
 
+                // NEW (Part 2): track distinct non-null values per column
+                // One HashSet per column; duplicates won't increase size
+                List<Set<String>> uniqueSets = new ArrayList<>(numberOfColumns);
+                for (int c = 0; c < numberOfColumns; c++) {
+                        uniqueSets.add(new HashSet<>());
+                }
+
                 for (int r = 1; r < lines.length; r++) {
                         // Split each row using comma delimiter, keeping empty cells
                         String[] cells = lines[r].split(",", -1);
@@ -91,9 +110,13 @@ public class DataAnalysisService {
                         }
 
                         // Count empty or whitespace-only cells as nulls
+                        // NEW (Part 2): add non-null trimmed values to that column's unique set
                         for (int c = 0; c < numberOfColumns; c++) {
-                                if (cells[c].trim().isEmpty()) {
+                                String trimmed = cells[c].trim();
+                                if (trimmed.isEmpty()) {
                                         nullCounts[c]++;
+                                } else {
+                                        uniqueSets.get(c).add(trimmed); // Part 2: collect uniques
                                 }
                         }
                 }
@@ -127,7 +150,8 @@ public class DataAnalysisService {
                                         .dataAnalysis(dataAnalysisEntity)
                                         .columnName(headers[i])
                                         .nullCount(nullCounts[i])
-                                        .uniqueCount(0) // unique count handled in Part 2
+                                        // NEW (Part 2): persist number of distinct, non-null values
+                                        .uniqueCount(uniqueSets.get(i).size())
                                         .build();
                         columnStatsEntities.add(stat);
                 }
@@ -141,6 +165,7 @@ public class DataAnalysisService {
                 // ---------------------------------------------------------------------
                 // 7) Build and return response DTO
                 // ---------------------------------------------------------------------
+                // NOTE (Part 2): DTO now reflects the computed uniqueCount per column
                 List<ColumnStatistics> statsDto = columnStatsEntities.stream()
                                 .map(e -> new ColumnStatistics(
                                                 e.getColumnName(),
@@ -155,4 +180,75 @@ public class DataAnalysisService {
                                 statsDto,
                                 createdAt);
         }
+
+        // ---------------------------------------------------------------------
+        // NEW (Part 2): central mapper to keep response consistent
+        // ---------------------------------------------------------------------
+        /**
+         * Maps a persisted entity (with children) to the response DTO used by the API.
+         */
+        private DataAnalysisResponse mapToResponse(DataAnalysisEntity e) {
+                List<ColumnStatistics> statsDto = e.getColumnStatistics().stream()
+                                .map(cs -> new ColumnStatistics(
+                                                cs.getColumnName(),
+                                                cs.getNullCount(),
+                                                cs.getUniqueCount()))
+                                .toList();
+
+                return new DataAnalysisResponse(
+                                e.getNumberOfRows(),
+                                e.getNumberOfColumns(),
+                                e.getTotalCharacters(),
+                                statsDto,
+                                e.getCreatedAt());
+        }
+
+        // ---------------------------------------------------------------------
+        // NEW (Part 2): fetch previously-saved analysis by id
+        // ---------------------------------------------------------------------
+        /**
+         * Retrieves a previously saved analysis by its id.
+         * <p>
+         * Loads the parent and its column statistics and maps them to the response DTO.
+         *
+         * @param id the analysis id
+         * @return the mapped response DTO
+         * @throws org.springframework.web.server.ResponseStatusException if not found
+         *                                                                (404)
+         */
+        public DataAnalysisResponse getAnalysisById(long id) {
+                var entityOpt = dataAnalysisRepository.findById(id);
+                if (entityOpt.isEmpty()) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                        org.springframework.http.HttpStatus.NOT_FOUND, "Analysis not found");
+                }
+                DataAnalysisEntity e = entityOpt.get();
+                // If columnStatistics is LAZY, accessing it here keeps things safe in service
+                // e.getColumnStatistics().size();
+                return mapToResponse(e);
+        }
+
+        // ---------------------------------------------------------------------
+        // NEW (Part 2): delete an analysis by id
+        // ---------------------------------------------------------------------
+        /**
+         * Deletes an analysis and its column statistics.
+         * <p>
+         * Assumes orphanRemoval/cascade is configured on the
+         * DataAnalysisEntity->ColumnStatisticsEntity relationship.
+         *
+         * @param id the analysis id
+         * @throws org.springframework.web.server.ResponseStatusException if not found
+         *                                                                (404)
+         */
+        public void deleteAnalysis(long id) {
+                // If the id doesn't exist, return 404 to match test expectations
+                if (!dataAnalysisRepository.existsById(id)) {
+                        throw new org.springframework.web.server.ResponseStatusException(
+                                        org.springframework.http.HttpStatus.NOT_FOUND, "Analysis not found");
+                }
+                // Deleting the parent should cascade to children due to orphanRemoval=true
+                dataAnalysisRepository.deleteById(id);
+        }
+
 }
