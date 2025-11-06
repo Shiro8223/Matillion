@@ -21,6 +21,17 @@ public class AnalysisReportController {
         // Load dataset summary
         DataAnalysisResponse analysis = dataAnalysisService.getAnalysisById(id);
 
+        // fetch enhanced stats (types, dq, etc.)
+        var stats = dataAnalysisService.getStats(id);
+
+        // index by lowercased column name for quick lookup
+        java.util.Map<String, com.matillion.techtest2025.controller.response.StatsResponse.ColumnStatsView> byName = new java.util.HashMap<>();
+        if (stats != null && stats.columns() != null) {
+            for (var v : stats.columns()) {
+                byName.put(v.columnName().toLowerCase(), v);
+            }
+        }
+
         // Build column rows
         StringBuilder rows = new StringBuilder();
         var cols = (analysis.columnStatistics() != null)
@@ -28,11 +39,36 @@ public class AnalysisReportController {
                 : java.util.List.<com.matillion.techtest2025.model.ColumnStatistics>of();
 
         for (var cs : cols) {
+            var view = byName.get(cs.columnName().toLowerCase());
+
+            String dtype = (view != null && view.dataType() != null) ? view.dataType() : "-";
+
+            String dq = "-";
+            if (view != null && view.qualityScore() != null && view.qualityGrade() != null) {
+                dq = view.qualityScore() + " (" + view.qualityGrade() + ")";
+            }
+
+            // --- outlier info (numeric only) ---
+            String outlierDisplay = "-";
+            var out = (view != null) ? view.outlierSummary() : null; // <— was view.outliers()
+
+            if (out != null && out.outlierCount() != null) {
+                Double lower = out.lowerFence();
+                Double upper = out.upperFence();
+                Integer count = out.outlierCount();
+                outlierDisplay = "<span title='Lower: " + lower + "  Upper: " + upper + "'>"
+                        + "&#9650; " + count + "</span>"; // ▲
+            }
+
             rows.append("<tr>")
                     .append("<td>").append(escape(cs.columnName())).append("</td>")
+                    .append("<td>").append(escape(dtype)).append("</td>")
                     .append("<td style=\"text-align:right\">").append(cs.nullCount()).append("</td>")
                     .append("<td style=\"text-align:right\">").append(cs.uniqueCount()).append("</td>")
+                    .append("<td style=\"text-align:right\"><span class=\"pill\">").append(dq).append("</span></td>")
+                    .append("<td style=\"text-align:right\">").append(outlierDisplay).append("</td>")
                     .append("</tr>");
+
         }
 
         // Build final HTML
@@ -56,6 +92,9 @@ public class AnalysisReportController {
                 "th{font-weight:600;text-align:left;background:#fafafa;border-top:0;border-bottom:1px solid #eee}" +
                 "tr:last-child td{border-bottom:1px solid #eee}" +
                 "td:nth-child(2), td:nth-child(3){text-align:right}" +
+                "td span[title]{cursor:help}" +
+                ".pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef;border:1px solid #ccd;font-size:12px}"
+                +
                 "</style>" +
                 "</head>" +
                 "<body>" +
@@ -76,7 +115,8 @@ public class AnalysisReportController {
                 "<section>" +
                 "<h2 style='margin-top:24px'>Columns</h2>" +
                 "<table aria-label='Column statistics'>" +
-                "<thead><tr><th style='width:60%'>Name</th><th>Nulls</th><th>Uniques</th></tr></thead>" +
+                "<thead><tr><th style='width:48%'>Name</th><th style='width:14%'>Type</th><th>Nulls</th><th>Uniques</th><th>DQ</th><th>Outliers</th></tr></thead>"
+                +
                 "<tbody>" + rows + "</tbody>" +
                 "</table>" +
                 "<p class='muted' style='margin-top:8px'>View raw JSON: " +
