@@ -8,26 +8,29 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.TEXT_PLAIN;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
  * Part 3 – Type inference, descriptive statistics, Data Quality Score (DQS),
- * and Outlier Detection (IQR).
+ * Outlier Detection (IQR), and visualizer/download endpoints.
  *
  * Conventions this test expects from the /api/analysis/{id}/stats endpoint:
- * - Response JSON:
  * {
  * "id": <long>,
  * "columns": [
  * {
  * "columnName": "age",
- * "dataType": "INTEGER", // or DECIMAL/BOOLEAN/DATE/STRING
+ * "dataType": "INTEGER" | "DECIMAL" | "BOOLEAN" | "DATE" | "STRING",
  * "nullCount": 0,
  * "uniqueCount": 3,
  * // numeric
@@ -63,6 +66,10 @@ class Part3Tests {
     void setUp() {
         dataAnalysisRepository.deleteAll();
     }
+
+    // ---------------------------
+    // Existing analytics tests
+    // ---------------------------
 
     @Test
     void statsEndpointReturnsTypesAndBasicStats() throws Exception {
@@ -197,9 +204,105 @@ class Part3Tests {
         assertThat(outlierCount).isGreaterThanOrEqualTo(1.0);
     }
 
+    // ---------------------------------------
+    // New visualizer / downloads endpoint tests
+    // ---------------------------------------
+
+    @Test
+    void htmlReport_returns200_andContainsBasics() throws Exception {
+        long id = ingestCsvAndReturnLatestId();
+
+        mockMvc.perform(get("/api/analysis/{id}/report", id))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("Dataset Report")))
+                .andExpect(content().string(containsString("Analysis ID: " + id)))
+                .andExpect(content().string(containsString("Rows")))
+                .andExpect(content().string(containsString("Columns")))
+                .andExpect(content().string(containsString("driver"))) // a known column
+                .andExpect(header().doesNotExist(HttpHeaders.CONTENT_DISPOSITION)); // preview, not download
+    }
+
+    @Test
+    void pdfReport_downloadsAttachment_withPdfContentType() throws Exception {
+        long id = ingestCsvAndReturnLatestId();
+
+        var mvcResult = mockMvc.perform(get("/api/analysis/{id}/report", id)
+                .param("format", "pdf"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        containsString("analysis-" + id + "-report.pdf")))
+                .andReturn();
+
+        byte[] pdf = mvcResult.getResponse().getContentAsByteArray();
+        assertThat(pdf).as("PDF body should not be empty").isNotEmpty();
+        String head = new String(pdf, 0, Math.min(pdf.length, 4));
+        assertThat(head).isEqualTo("%PDF");
+    }
+
+    @Test
+    void statsDownload_forcesAttachment_withJsonContentType() throws Exception {
+        long id = ingestCsvAndReturnLatestId();
+
+        mockMvc.perform(get("/api/analysis/{id}/stats", id)
+                .param("download", "true"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        containsString("analysis-" + id + "-stats.json")))
+                .andExpect(content().string(containsString("\"columns\"")))
+                .andExpect(content().string(not(containsString("<html")))); // ensure it's not HTML
+    }
+
+    @Test
+    void shouldHandleHeaderOnlyCsvGracefully() throws Exception {
+        String csv = "name,age,team\n"; // header only
+
+        mockMvc.perform(post("/api/analysis/ingestCsv")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content(csv))
+                .andExpect(status().isOk());
+
+        long id = dataAnalysisRepository.findAll().getFirst().getId();
+
+        String stats = mockMvc.perform(get("/api/analysis/{id}/stats", id))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode cols = objectMapper.readTree(stats).path("columns");
+        assertThat(cols.isArray()).isTrue();
+        assertThat(cols).hasSize(3);
+
+        // All counts zero, no crash, grade defaults to A/F as appropriate
+        for (JsonNode col : cols) {
+            assertThat(num(col, "nullCount")).isZero();
+            assertThat(num(col, "uniqueCount")).isZero();
+        }
+    }
+
     // --------------------
     // Helpers
     // --------------------
+
+    // ingest a tiny CSV and return the created analysis ID from the repository.
+    private long ingestCsvAndReturnLatestId() throws Exception {
+        String csv = String.join("\n",
+                "driver,number,team",
+                "Max Verstappen,1,Red Bull Racing",
+                "Lewis Hamilton,44,Mercedes");
+
+        mockMvc.perform(post("/api/analysis/ingestCsv")
+                .contentType(TEXT_PLAIN)
+                .content(csv))
+                .andExpect(status().isOk());
+
+        var all = dataAnalysisRepository.findAll();
+        assertThat(all).isNotEmpty();
+        return all.stream().mapToLong(e -> e.getId()).max().orElseThrow();
+    }
 
     private static JsonNode findColumn(JsonNode columns, String name) {
         for (JsonNode n : columns) {

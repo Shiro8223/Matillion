@@ -15,13 +15,13 @@ import org.springframework.stereotype.Service;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-// NEW (Part 2): imports for unique counting
+// Part 2 imports for unique counting
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
-// NEW (Part 3): imports for stats endpoint
+// Part 3 imports for stats endpoint
 import com.matillion.techtest2025.controller.response.StatsResponse;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Map;
@@ -30,16 +30,12 @@ import java.util.Comparator;
 /**
  * Service layer containing the core business logic for CSV analysis.
  *
- * <p>
  * Responsibilities:
- * <ul>
- * <li>Validates and parses CSV input</li>
- * <li>Computes per-column statistics (nulls, uniques, etc.)</li>
- * <li>Persists results to the H2 in-memory database</li>
- * <li>Provides retrieval and deletion operations</li>
- * <li>(Part 3) Exposes type inference and descriptive statistics for
- * /stats</li>
- * </ul>
+ * - Validates and parses CSV input
+ * - Computes per-column statistics (nulls, uniques, etc.)
+ * - Persists results to the H2 in-memory database
+ * - Provides retrieval and deletion operations
+ * - (Part 3) Exposes type inference and descriptive statistics for /stats
  */
 @Service
 @RequiredArgsConstructor
@@ -55,12 +51,10 @@ public class DataAnalysisService {
         /**
          * Analyzes raw CSV text and saves the computed statistics.
          *
-         * <p>
-         * <b>Part 1:</b> Parse and validate the CSV, count rows/columns/nulls,
+         * Part 1: Parse and validate the CSV, count rows/columns/nulls,
          * persist the data, and return a DataAnalysisResponse.
          *
-         * <p>
-         * <b>Part 2:</b> Extend logic to compute unique non-null values per column.
+         * Part 2: Extend logic to compute unique non-null values per column.
          */
         public DataAnalysisResponse analyzeCsvData(String data) {
                 // -----------------------------------------------------------------
@@ -134,17 +128,16 @@ public class DataAnalysisService {
                                 .createdAt(createdAt)
                                 .build();
 
-                DataAnalysisEntity saved = dataAnalysisRepository.save(parent); // <-- must capture saved
+                DataAnalysisEntity saved = dataAnalysisRepository.save(parent);
 
                 // -----------------------------------------------------------------
-                // 6) Build & persist child entities (ColumnStatisticsEntity) — LINK TO SAVED
-                // PARENT
+                // 6) Build & persist child entities (ColumnStatisticsEntity)
                 // -----------------------------------------------------------------
                 List<ColumnStatisticsEntity> children = new ArrayList<>();
 
                 for (int i = 0; i < numberOfColumns; i++) {
                         ColumnStatisticsEntity stat = ColumnStatisticsEntity.builder()
-                                        .dataAnalysis(saved) // <-- link to SAVED parent
+                                        .dataAnalysis(saved) // link to parent
                                         .columnName(headers[i])
                                         .nullCount(nullCounts[i])
                                         .uniqueCount(uniqueSets.get(i).size()) // Part 2
@@ -162,7 +155,7 @@ public class DataAnalysisService {
         }
 
         // ---------------------------------------------------------------------
-        // Helper: entity → DTO mapper (keeps mapping consistent across endpoints)
+        // Helper: entity -> DTO mapper (keeps mapping consistent across endpoints)
         // ---------------------------------------------------------------------
         private DataAnalysisResponse mapToResponse(DataAnalysisEntity e) {
                 List<ColumnStatistics> statsDto = e.getColumnStatistics().stream()
@@ -208,26 +201,23 @@ public class DataAnalysisService {
         }
 
         // ---------------------------------------------------------------------
-        // PART 3: new stats endpoint (placeholder)
+        // PART 3: new stats endpoint
         // ---------------------------------------------------------------------
 
         /**
          * Retrieves enhanced statistics for an existing analysis (Part 3).
          *
-         * <p>
          * Currently only verifies that the record exists and returns an empty
          * {@link StatsResponse}. The next steps will fill this with:
-         * <ul>
-         * <li>Column type inference (INTEGER, DECIMAL, BOOLEAN, DATE, STRING)</li>
-         * <li>Descriptive statistics (min, max, mean, etc.)</li>
-         * <li>Data quality score and outlier detection</li>
-         * </ul>
+         * - Column type inference (INTEGER, DECIMAL, BOOLEAN, DATE, STRING)
+         * - Descriptive statistics (min, max, mean, etc.)
+         * - Data quality score and outlier detection
          *
          * @param id analysis identifier
          * @return empty placeholder response until Part 3 implementation is complete
          */
         public StatsResponse getStats(long id) {
-                // 1) Load persisted analysis (404 if missing)
+                // 1) Load persisted analysis
                 DataAnalysisEntity entity = dataAnalysisRepository.findById(id)
                                 .orElseThrow(() -> new EntityNotFoundException("Analysis " + id + " not found"));
 
@@ -236,7 +226,7 @@ public class DataAnalysisService {
                         return new StatsResponse(entity.getId(), List.of());
                 }
 
-                // 2) Parse CSV lines + header (preserve order)
+                // 2) Parse CSV lines + header
                 String[] lines = csv.split("\\r?\\n", -1);
                 if (lines.length == 0) {
                         return new StatsResponse(entity.getId(), List.of());
@@ -254,7 +244,7 @@ public class DataAnalysisService {
                                 continue;
                         String[] cells = splitCsvLine(lines[r]);
                         if (cells.length != cols)
-                                continue; // malformed rows were rejected at ingest; guard just in case
+                                continue; // malformed rows were rejected at ingest
                         for (int c = 0; c < cols; c++)
                                 columnCells.get(c).add(cells[c]);
                 }
@@ -380,7 +370,7 @@ public class DataAnalysisService {
                                                                 oc++;
                                                 outlierCount = oc;
                                         } else {
-                                                // No numeric values but inferred numeric ⇒ everything was invalid
+                                                // No numeric values but inferred numeric = everything was invalid
                                                 invalid = nonNull.size();
                                         }
                                 }

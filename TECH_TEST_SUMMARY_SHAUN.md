@@ -115,7 +115,7 @@
 ./gradlew bootRun
 ```
 
-## Part 3.1 Completion Roadmap
+## Part 3.1
 
 ### **What was implemented**
 
@@ -151,9 +151,9 @@
 
 #### **1. Ingest CSV (existing)**
 
+- Body: raw CSV data
 - POST /api/analysis/ingestCsv
 - Content-Type: text/plain
-- Body: raw CSV data
 
 #### **2. Fetch Enhanced Stats (new)**
 
@@ -166,48 +166,79 @@
   "id": 1,
   "columns": [
     {
-      "columnName": "age",
-      "dataType": "INTEGER",
+      "columnName": "driver",
+      "dataType": "STRING",
       "nullCount": 0,
-      "uniqueCount": 3,
-      "min": 18.0,
-      "max": 40.0,
-      "mean": 26.67,
-      "median": 22.0,
-      "stddev": 9.57,
+      "uniqueCount": 10,
+      "minLength": 3,
+      "maxLength": 15,
       "qualityScore": 90,
-      "qualityGrade": "A",
-      "outlierSummary": {
-        "lowerFence": 3.5,
-        "upperFence": 47.5,
-        "outlierCount": 0
-      }
+      "qualityGrade": "A"
     },
     {
-      "columnName": "is_active",
-      "dataType": "BOOLEAN",
-      "trueCount": 2,
-      "falseCount": 1,
+      "columnName": "number",
+      "dataType": "INTEGER",
+      "nullCount": 0,
+      "uniqueCount": 10,
+      "min": 1,
+      "max": 81,
+      "mean": 29.9,
+      "median": 15,
+      "stddev": 26.98,
+      "qualityScore": 90,
+      "qualityGrade": "A"
+    },
+    {
+      "columnName": "team",
+      "dataType": "STRING",
+      "nullCount": 0,
+      "uniqueCount": 6,
       "qualityScore": 100,
       "qualityGrade": "A"
     },
     {
-      "columnName": "signup_date",
-      "dataType": "DATE",
-      "minDate": "2024-01-01",
-      "maxDate": "2024-12-31",
-      "qualityScore": 90,
+      "columnName": "nationality",
+      "dataType": "STRING",
+      "nullCount": 0,
+      "uniqueCount": 7,
+      "qualityScore": 100,
       "qualityGrade": "A"
     },
     {
-      "columnName": "notes",
-      "dataType": "STRING",
-      "minLength": 2,
-      "maxLength": 5,
-      "nullCount": 1,
-      "uniqueCount": 2,
-      "qualityScore": 77,
-      "qualityGrade": "C"
+      "columnName": "podiums",
+      "dataType": "INTEGER",
+      "nullCount": 0,
+      "uniqueCount": 10,
+      "min": 4,
+      "max": 199,
+      "mean": 55.6,
+      "median": 31,
+      "stddev": 59.15,
+      "qualityScore": 90,
+      "qualityGrade": "A",
+      "outlierSummary": {
+        "lowerFence": -92.875,
+        "upperFence": 196.125,
+        "outlierCount": 1
+      }
+    },
+    {
+      "columnName": "championships",
+      "dataType": "INTEGER",
+      "nullCount": 0,
+      "uniqueCount": 4,
+      "min": 0,
+      "max": 7,
+      "mean": 1.2,
+      "median": 0,
+      "stddev": 2.18,
+      "qualityScore": 100,
+      "qualityGrade": "A",
+      "outlierSummary": {
+        "lowerFence": -2.25,
+        "upperFence": 3.75,
+        "outlierCount": 1
+      }
     }
   ]
 }
@@ -258,13 +289,13 @@ Grades: **A ≥ 90**, **B ≥ 80**, **C ≥ 70**, **D ≥ 60**, **F < 60**
 - Endpoint /api/analysis/{id}/stats returns full analytics payload
 - Analyzer now provides intelligent, production-grade insight per column
 
-# Part 3.2 — HTML & PDF Visualizer
+# Part 3.2 - HTML & PDF Visualizer
 
 ## Summary
 
-> “In Part 3.2, I implemented a complete HTML + PDF visualization layer on top of our data-profiling backend.  
+> In Part 3.2, I implemented a complete HTML + PDF visualization layer on top of our data-profiling backend.  
 > The system dynamically generates a dataset report using existing analysis results, then exports it as both web and PDF formats.  
-> It demonstrates clean routing, server-side rendering, and full-stack polish turning raw analytics into a clear, shareable insight report.”
+> It demonstrates clean routing, server-side rendering, and full-stack polish turning raw analytics into a clear, shareable insight report.
 
 ---
 
@@ -329,10 +360,23 @@ Grades: **A ≥ 90**, **B ≥ 80**, **C ≥ 70**, **D ≥ 60**, **F < 60**
 
 ## 5) Validation Checklist
 
-| Feature                                                    | Status |
-| ---------------------------------------------------------- | ------ |
-| `/api/analysis/{id}/report` renders HTML                   | ✅     |
-| `/api/analysis/{id}/report?format=pdf` downloads valid PDF | ✅     |
-| `/api/analysis/{id}/stats?download=true` downloads JSON    | ✅     |
-| Mobile & desktop responsive                                | ✅     |
-| No controller conflicts                                    | ✅     |
+| Feature                                                                          | Status | Validation Method                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTML report renders correctly**<br>`GET /api/analysis/{id}/report`             | ✅     | **Automated:** `htmlReport_returns200_andContainsBasics()`<br>→ Confirms HTTP `200 OK`, `Content-Type: text/html`, and verifies key elements (“Dataset Report”, “Rows”, “Columns”, and column names) appear in the body.   |
+| **PDF export downloads correctly**<br>`GET /api/analysis/{id}/report?format=pdf` | ✅     | **Automated:** `pdfReport_downloadsAttachment_withPdfContentType()`<br>→ Validates `application/pdf` content type, correct `Content-Disposition` filename, non-empty byte array, and `%PDF` file header signature.         |
+| **Raw JSON download works**<br>`GET /api/analysis/{id}/stats?download=true`      | ✅     | **Automated:** `statsDownload_forcesAttachment_withJsonContentType()`<br>→ Confirms `Content-Type: application/json`, presence of attachment header, and that output contains `"columns"` while excluding any HTML markup. |
+| **Responsive layout (mobile/desktop)**                                           | ✅     | **Manual QA:** Tested visually at multiple viewport widths; CSS grid layout and media queries ensure two-column desktop and single-column mobile view.                                                                     |
+| **No controller mapping conflicts**                                              | ✅     | **Startup validation:** Confirmed via Spring Boot logs, no `Ambiguous mapping` errors after introducing `params="download=true"` constraint on JSON route.                                                                 |
+| **Data flow reuse confirmed**                                                    | ✅     | **Code review:** Both HTML and PDF generators reuse the same service calls (`getAnalysisById()` and `getStats()`) ensuring single source of truth.                                                                         |
+| **Error handling for PDF generation**                                            | ✅     | **Automated/manual mix:** verified through forced failure (invalid HTML) returns readable text message `"Failed to generate PDF: …"` with HTTP 500.                                                                        |
+
+### 6) Testing Summary
+
+All Part 3.2 endpoints are covered by automated **MockMvc integration tests** in `Part3Tests.java`  
+(`htmlReport_returns200_andContainsBasics`, `pdfReport_downloadsAttachment_withPdfContentType`, and `statsDownload_forcesAttachment_withJsonContentType`).
+
+All tests run successfully with:
+
+```bash
+./gradlew test --tests "*Part3Tests*"
+```
