@@ -258,146 +258,81 @@ Grades: **A ≥ 90**, **B ≥ 80**, **C ≥ 70**, **D ≥ 60**, **F < 60**
 - Endpoint /api/analysis/{id}/stats returns full analytics payload
 - Analyzer now provides intelligent, production-grade insight per column
 
-# Part 3.2 — HTML Visualizer (Design, No Code)
+# Part 3.2 — HTML & PDF Visualizer
 
-## 1) What we already have
+## Summary
 
-- **Ingest & persist**: Raw CSV stored + row/column/char counts + per-column nulls/uniques.
-- **Stats API**: `/api/analysis/{id}/stats` returns:
-  - Inferred types (`INTEGER/DECIMAL/BOOLEAN/DATE/STRING`)
-  - Per-type stats (numeric min/max/mean/median/stddev; boolean true/false counts; date min/max; string length min/max)
-  - Data Quality Score (0–100) + grade (A–F)
-  - Outlier summary for numeric (IQR fences + count)
-
-> Translation: We already have everything needed to render a compelling HTML report. The visualizer is just **presentation** over existing data.
+> “In Part 3.2, I implemented a complete HTML + PDF visualization layer on top of our data-profiling backend.  
+> The system dynamically generates a dataset report using existing analysis results, then exports it as both web and PDF formats.  
+> It demonstrates clean routing, server-side rendering, and full-stack polish turning raw analytics into a clear, shareable insight report.”
 
 ---
 
-## 2) What we will add
+## 1) What we implemented
 
-- A **human-readable HTML report** for any analysis ID:
-  - Route: `GET /api/analysis/{id}/report`
-  - Returns an HTML page with sections and simple charts (no heavy JS required).
-- A **clean layout** with badges, tables, and lightweight charts built from the stats JSON.
+- **HTML visualizer endpoint:**  
+  `GET /api/analysis/{id}/report`  
+  Generates a fully formatted, responsive HTML dataset report using:
 
----
+  - `DataAnalysisService.getAnalysisById(id)` for metadata (rows, columns, timestamps)
+  - `DataAnalysisService.getStats(id)` for per-column analytics
 
-## 3) Why this is valuable (interview-friendly impact)
+- **PDF export (stretch goal achieved):**  
+  `GET /api/analysis/{id}/report?format=pdf`  
+  Converts the same HTML into a downloadable PDF using **OpenHTMLtoPDF** (`PdfRendererBuilder`), with XHTML output for XML compliance.
 
-- **Immediate clarity**: Stakeholders can skim a web page instead of JSON.
-- **Professional polish**: Shows you think about the last mile — communicating results.
-- **Reusability**: Same stats API powers multiple front-ends (HTML now, dashboard later).
-- **Low risk**: No new persistence or complex algorithms — just UI over stable data.
-
----
-
-## 4) Page structure (at a glance)
-
-**Header**
-
-- Title: “Dataset Report”
-- Subheader: Analysis ID, created timestamp (from `/api/analysis/{id}` if you expose it), row/column counts.
-
-**Quality Overview**
-
-- **Overall quality** badge (e.g., average of column DQS).
-- Top 3 best/worst columns by DQS.
-- Outlier summary: count of numeric columns with outliers.
-
-**Per-Column Cards** (repeat for each header, in original order)
-
-- **Title**: `<columnName>` + type pill (e.g., `INTEGER`)
-- **DQS badge**: e.g., `A (92)`
-- **Key metrics** (type-aware):
-  - Numeric: min / median / mean / max / stddev
-  - Boolean: trueCount / falseCount (% split)
-  - Date: minDate / maxDate (range)
-  - String: minLength / maxLength
-- **Nulls & Uniques**: `nullCount`, `uniqueCount`
-- **Outliers (numeric only)**: `lowerFence`, `upperFence`, `outlierCount`
-- **Micro-chart**:
-  - Numeric → mini histogram (bucketed counts)
-  - Boolean → mini bar (true vs false)
-  - String → mini bar of length buckets (e.g., 0–10, 11–20, …)
-
-**Footer**
-
-- Disclaimer: “Exploratory profiling — not inferential statistics.”
-- Link to raw JSON (`/api/analysis/{id}/stats`) for transparency.
+- **Raw JSON download:**  
+  `GET /api/analysis/{id}/stats?download=true`  
+  Returns a pretty-printed JSON download with correct `Content-Disposition` headers, avoiding overlap with `/stats` via a `params="download=true"` constraint.
 
 ---
 
-## 5) UX details (simple, crisp, explainable)
+## 2) Key features in the HTML report
 
-- **Color system**:
-  - DQS grade badge colors: A=green, B=teal, C=amber, D=orange, F=red.
-  - Outlier flag: red dot if `outlierCount > 0`.
-- **Layout**:
-  - Two-column grid on desktop, single column on mobile.
-  - Cards with subtle shadows and rounded corners for readability.
-- **Accessibility**:
-  - Semantic HTML (header, main, section, footer).
-  - Sufficient color contrast; badge color + text label (not color alone).
-  - Charts include aria-labels and numeric summaries.
+| Section             | Details                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Header**          | Displays “Dataset Report”, analysis ID, creation date, and summary metrics (row/column counts).                                  |
+| **Column Table**    | Lists each column with: name, inferred type, nullCount, uniqueCount, data-quality score (grade A–F + numeric), and outlier info. |
+| **DQ Badges**       | Color-coded pills — A=blue, B=teal, C=amber, D=orange, F=red.                                                                    |
+| **Outlier Display** | Shows ▲ icon (lower/upper fences + outlier count).                                                                               |
+| **Actions Section** | “Download JSON” and “Download PDF” buttons.                                                                                      |
+| **Footer**          | Mentions raw JSON endpoint and provides direct link for transparency.                                                            |
 
 ---
 
-## 6) Data mapping (what goes where)
+## 3) Architecture & Integration
 
-- From `/stats`:
-  - `columns[*].dataType` → type pill
-  - `qualityScore`, `qualityGrade` → DQS badge + tooltip
-  - Numeric stats → main metrics + histogram bins (computed client-side from values or summarized)
-  - Boolean `trueCount/falseCount` → percentage bars
-  - Date `minDate/maxDate` → displayed range
-  - String `minLength/maxLength` → length range
-  - `nullCount`, `uniqueCount` → info row
-  - `outlierSummary` → red badge with count + fences in tooltip
+- **Data flow:**
 
----
+  - The `/stats` API already provided full per-column stats, DQ grades, and outlier summaries.
+  - The new controller **reuses** these endpoints to compose the HTML dynamically — no new persistence or services were added.
 
-## 7) API shape & endpoints (no code, just spec)
+- **Routing fixes:**
 
-- **HTML report**: `GET /api/analysis/{id}/report` → `text/html`
-  - Server composes HTML using the JSON from `/stats`.
-- **Optional raw**: Link on the page to `/api/analysis/{id}/stats` (json) and `/api/analysis/{id}` (basic metadata).
-- **Optional export**: `GET /api/analysis/{id}/report?format=pdf` (stretch goal — generate a PDF of the same HTML).
+  - `params="download=true"` was introduced for the JSON download route to prevent Spring’s _ambiguous mapping_ conflict with `DataAnalysisController#stats(Long)`.
+  - Both controllers now boot without error.
+
+- **Rendering stack:**
+  - HTML is generated server-side via `StringBuilder` with embedded CSS.
+  - XHTML (strict XML) is used for PDF generation compatibility with `openhtmltopdf`.
+  - Minimal, dependency-free CSS ensures consistent rendering in browsers and PDFs.
 
 ---
 
-## 8) Acceptance criteria (what “done” means)
+## 4) Why this matters
 
-- Visiting `/api/analysis/{id}/report` renders:
-  - Header with dataset counts (rows/cols).
-  - Quality overview with average DQS and top/bottom columns.
-  - One card per column with type-aware stats and DQS.
-  - An outlier indicator where applicable.
-  - A simple visual for each column (bar or histogram).
-  - A footer with disclaimers and links to raw JSON.
-- Works on mobile and desktop (responsive).
-- Handles edge cases:
-  - No numeric columns → no outlier section.
-  - Header-only CSV → shows “no data rows” but still renders cards with zeroes.
-  - Constant numeric column → outlier section hidden; stats show min=max and stddev≈0.
+- **Professional presentation:** Converts JSON stats into a stakeholder-friendly visual summary.
+- **End-to-end thinking:** Demonstrates understanding from data ingestion to human-readable reporting.
+- **Reusability:** HTML and PDF both pull from the same analysis + stats data model.
 
 ---
 
-## 9) Demo script (interview walkthrough)
+## 5) Validation Checklist
 
-1. **Ingest** the provided F1 CSV (curl or UI).
-2. **Open** `/api/analysis/{id}/report`.
-3. **Narrate**:
-   - “Type detection assigns each column a type.”
-   - “Per-type stats appear here; DQS badges summarize cleanliness.”
-   - “Outliers are flagged; numeric visuals show distribution.”
-   - “You can click ‘View raw JSON’ to inspect the exact data.”
-4. **Close** with why it matters: “Non-technical readers get value immediately; technical users still have the raw stats.”
-
----
-
-## 10) Stretch ideas (if time allows, still no code here)
-
-- **Filter bar** on the page (show only numeric/categorical/flagged columns).
-- **Badge legend** explaining DQS grading.
-- **Download buttons**: JSON, CSV, and (if implemented) PDF.
-- **Shareable link** with a minimal query string (e.g., highlighting a specific column).
+| Feature                                                    | Status |
+| ---------------------------------------------------------- | ------ |
+| `/api/analysis/{id}/report` renders HTML                   | ✅     |
+| `/api/analysis/{id}/report?format=pdf` downloads valid PDF | ✅     |
+| `/api/analysis/{id}/stats?download=true` downloads JSON    | ✅     |
+| Mobile & desktop responsive                                | ✅     |
+| No controller conflicts                                    | ✅     |
