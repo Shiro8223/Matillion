@@ -369,11 +369,12 @@ Grades: **A ≥ 90**, **B ≥ 80**, **C ≥ 70**, **D ≥ 60**, **F < 60**
 | **No controller mapping conflicts**                                              | ✅     | **Startup validation:** Confirmed via Spring Boot logs, no `Ambiguous mapping` errors after introducing `params="download=true"` constraint on JSON route.                                                                 |
 | **Data flow reuse confirmed**                                                    | ✅     | **Code review:** Both HTML and PDF generators reuse the same service calls (`getAnalysisById()` and `getStats()`) ensuring single source of truth.                                                                         |
 | **Error handling for PDF generation**                                            | ✅     | **Automated/manual mix:** verified through forced failure (invalid HTML) returns readable text message `"Failed to generate PDF: …"` with HTTP 500.                                                                        |
+| **Header-only CSV handled gracefully**                                           | ✅     | **Automated:** `shouldHandleHeaderOnlyCsvGracefully()`<br>→ Ensures ingestion and `/stats` endpoints handle valid CSVs with no data rows without throwing errors, returning zeroed metrics and default DQS grades.         |
 
 ### 6) Testing Summary
 
-All Part 3.2 endpoints are covered by automated **MockMvc integration tests** in `Part3Tests.java`  
-(`htmlReport_returns200_andContainsBasics`, `pdfReport_downloadsAttachment_withPdfContentType`, and `statsDownload_forcesAttachment_withJsonContentType`).
+All Part 3.2 endpoints and edge cases are covered by automated **MockMvc integration tests** in `Part3Tests.java`  
+(`htmlReport_returns200_andContainsBasics`, `pdfReport_downloadsAttachment_withPdfContentType`, `statsDownload_forcesAttachment_withJsonContentType`, and `shouldHandleHeaderOnlyCsvGracefully`).
 
 All tests run successfully with:
 
