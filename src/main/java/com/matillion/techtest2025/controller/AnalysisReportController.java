@@ -111,7 +111,6 @@ public class AnalysisReportController {
                 "  .pill.A{background:var(--pill-b)} .pill.B{background:var(--pill-b)}" +
                 "  .pill.C{background:var(--pill-c)} .pill.D{background:var(--pill-d)} .pill.F{background:var(--pill-f)}"
                 +
-                "  /* little ▲ tooltip cursor */ td span[title]{cursor:help}" +
                 "  /* responsive */" +
                 "  @media (max-width:960px){.grid{grid-template-columns:1fr}.v{font-size:20px}}" +
                 "</style>" +
