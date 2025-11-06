@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.*;
 
 import static org.springframework.http.HttpStatus.NO_CONTENT;
 
+//part 3
+import com.matillion.techtest2025.controller.response.StatsResponse;
+
 /**
  * REST controller for data analysis endpoints.
  * <p>
@@ -94,6 +97,21 @@ public class DataAnalysisController {
         // Part 2 implementation: delegate to service to perform deletion
         // -----------------------------------------------------------------
         dataAnalysisService.deleteAnalysis(id);
+    }
+    // Part 3 endpoint
+
+    /**
+     * Returns inferred types, descriptive statistics, data quality score,
+     * and outlier summary for each column in the analysis.
+     *
+     * @param id the analysis id
+     * @return stats-only view for the analysis
+     * @throws jakarta.persistence.EntityNotFoundException if the analysis does not
+     *                                                     exist (404)
+     */
+    @GetMapping("/{id}/stats")
+    public StatsResponse stats(@PathVariable Long id) {
+        return dataAnalysisService.getStats(id);
     }
 
 }

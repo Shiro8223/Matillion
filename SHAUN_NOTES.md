@@ -114,3 +114,14 @@
 # Run app for manual API tests
 ./gradlew bootRun
 ```
+
+## Part 3 Completion Roadmap
+
+### **Ideas to create**
+
+- **Upgrade the analyzer**
+  1.  Detect each column's data type `INT`, `DEC`, `BOOL`, `DATE`, `STRING`
+  2.  Compute stats based on types `MIN/MAX/MEAN` for numbers `Earliest/Latest` for dates
+  3.  Add a new Endpoint to fetch stats quickly: `GET/api/analysis/{id}/stats`
+  4.  Data Quality Score (0-100) per column
+  5.  Outlier detection for numeric columns (IQR method)
