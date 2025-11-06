@@ -6,18 +6,22 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * Response DTO (Data Transfer Object) containing the results of a data analysis operation.
+ * Response DTO (Data Transfer Object) containing the results of a data analysis
+ * operation.
  * <p>
- * This is a Java record, introduced in Java 14 as a concise way to create immutable data
+ * This is a Java record, introduced in Java 14 as a concise way to create
+ * immutable data
  * carrier classes. Records automatically generate:
  * <ul>
- *   <li>A constructor with all fields as parameters</li>
- *   <li>Getter methods for each field (without the "get" prefix)</li>
- *   <li>{@code equals()}, {@code hashCode()}, and {@code toString()} methods</li>
+ * <li>A constructor with all fields as parameters</li>
+ * <li>Getter methods for each field (without the "get" prefix)</li>
+ * <li>{@code equals()}, {@code hashCode()}, and {@code toString()} methods</li>
  * </ul>
  * <p>
- * This response is returned by the {@code POST /api/analysis/ingestCsv} endpoint and will be
+ * This response is returned by the {@code POST /api/analysis/ingestCsv}
+ * endpoint and will be
  * automatically serialized to JSON by Spring. For example:
+ * 
  * <pre>
  * {
  *   "numberOfRows": 100,
@@ -37,10 +41,10 @@ import java.util.List;
  * @see ColumnStatistics
  */
 public record DataAnalysisResponse(
-        int numberOfRows,
-        int numberOfColumns,
-        long totalCharacters,
-        List<ColumnStatistics> columnStatistics,
-        OffsetDateTime createdAt
-) {
+                long id,
+                int numberOfRows,
+                int numberOfColumns,
+                long totalCharacters,
+                List<ColumnStatistics> columnStatistics,
+                OffsetDateTime createdAt) {
 }

@@ -63,7 +63,6 @@ public class DataAnalysisService {
          * <b>Part 2:</b> Extend logic to compute unique non-null values per column.
          */
         public DataAnalysisResponse analyzeCsvData(String data) {
-
                 // -----------------------------------------------------------------
                 // 1) Input validation
                 // -----------------------------------------------------------------
@@ -125,9 +124,9 @@ public class DataAnalysisService {
                 OffsetDateTime createdAt = OffsetDateTime.now();
 
                 // -----------------------------------------------------------------
-                // 5) Persist parent entity (DataAnalysisEntity)
+                // 5) Persist parent entity (DataAnalysisEntity) — CAPTURE SAVED INSTANCE
                 // -----------------------------------------------------------------
-                DataAnalysisEntity dataAnalysisEntity = DataAnalysisEntity.builder()
+                DataAnalysisEntity parent = DataAnalysisEntity.builder()
                                 .originalData(data)
                                 .numberOfRows(numberOfRows)
                                 .numberOfColumns(numberOfColumns)
@@ -135,42 +134,31 @@ public class DataAnalysisService {
                                 .createdAt(createdAt)
                                 .build();
 
-                dataAnalysisRepository.save(dataAnalysisEntity);
+                DataAnalysisEntity saved = dataAnalysisRepository.save(parent); // <-- must capture saved
 
                 // -----------------------------------------------------------------
-                // 6) Persist child entities (ColumnStatisticsEntity)
+                // 6) Build & persist child entities (ColumnStatisticsEntity) — LINK TO SAVED
+                // PARENT
                 // -----------------------------------------------------------------
-                List<ColumnStatisticsEntity> columnStatsEntities = new ArrayList<>();
+                List<ColumnStatisticsEntity> children = new ArrayList<>();
 
                 for (int i = 0; i < numberOfColumns; i++) {
                         ColumnStatisticsEntity stat = ColumnStatisticsEntity.builder()
-                                        .dataAnalysis(dataAnalysisEntity)
+                                        .dataAnalysis(saved) // <-- link to SAVED parent
                                         .columnName(headers[i])
                                         .nullCount(nullCounts[i])
                                         .uniqueCount(uniqueSets.get(i).size()) // Part 2
                                         .build();
-                        columnStatsEntities.add(stat);
+                        children.add(stat);
                 }
 
-                columnStatisticsRepository.saveAll(columnStatsEntities);
-                dataAnalysisEntity.setColumnStatistics(columnStatsEntities); // maintain link
+                columnStatisticsRepository.saveAll(children);
+                saved.setColumnStatistics(children); // maintain in-memory graph
 
                 // -----------------------------------------------------------------
-                // 7) Build and return API response
+                // 7) Return API response via mapper (id first, matches record order)
                 // -----------------------------------------------------------------
-                List<ColumnStatistics> statsDto = columnStatsEntities.stream()
-                                .map(e -> new ColumnStatistics(
-                                                e.getColumnName(),
-                                                e.getNullCount(),
-                                                e.getUniqueCount()))
-                                .toList();
-
-                return new DataAnalysisResponse(
-                                numberOfRows,
-                                numberOfColumns,
-                                totalCharacters,
-                                statsDto,
-                                createdAt);
+                return mapToResponse(saved);
         }
 
         // ---------------------------------------------------------------------
@@ -185,6 +173,7 @@ public class DataAnalysisService {
                                 .toList();
 
                 return new DataAnalysisResponse(
+                                e.getId(),
                                 e.getNumberOfRows(),
                                 e.getNumberOfColumns(),
                                 e.getTotalCharacters(),
